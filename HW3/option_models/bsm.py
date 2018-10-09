@@ -42,7 +42,7 @@ class BsmModel:
         forward = spot / disc_fac * div_fac
         vol_std = self.vol*np.sqrt(texp)
         d1 = np.log(forward/strike)/vol_std + 0.5*vol_std
-        delta = ss.norm.cdf(d1)
+        delta = cp_sign*div_fac*ss.norm.cdf(cp_sign*d1)
         return delta
 
     def vega(self, strike, spot, texp, cp_sign=1):
@@ -51,7 +51,7 @@ class BsmModel:
         forward = spot / disc_fac * div_fac
         vol_std = self.vol*np.sqrt(texp)
         d1 = np.log(forward/strike)/vol_std + 0.5*vol_std
-        vega = spot*ss.norm.pdf(d1)*np.sqrt(texp)
+        vega = div_fac*spot*ss.norm.pdf(d1)*np.sqrt(texp)
         return vega
 
     def gamma(self, strike, spot, texp, cp_sign=1):
@@ -60,7 +60,7 @@ class BsmModel:
         forward = spot / disc_fac * div_fac
         vol_std = self.vol*np.sqrt(texp)
         d1 = np.log(forward/strike)/vol_std + 0.5*vol_std
-        gamma = ss.norm.pdf(d1)/(spot*vol_std)
+        gamma = div_fac*ss.norm.pdf(d1)/(spot*vol_std)
         return gamma
     
     def impvol(self, price, strike, spot, texp, cp_sign=1):
