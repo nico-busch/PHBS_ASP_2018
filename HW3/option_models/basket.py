@@ -106,7 +106,7 @@ def basket_price_norm_analytic(
     basket_vol = np.sqrt(weights @ cov_m @ np.transpose(weights))
     
     if (texp < 0 or basket_vol * np.sqrt(texp) < 1e-8):
-        return disc_fac * np.fmax(cp_sign * (forward-strike), 0)
+        return disc_fac * np.fmax(cp_sign * (basket_forward-strike), 0)
     
     basket_vol_std = np.fmax(basket_vol * np.sqrt(texp), 1.0e-16)
     d = (basket_forward - strike) / basket_vol_std

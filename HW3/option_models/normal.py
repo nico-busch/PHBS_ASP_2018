@@ -40,7 +40,7 @@ class NormalModel:
         forward = spot / disc_fac * div_fac
         vol_std = np.fmax(self.vol * np.sqrt(texp), 1.0e-16)
         d = (forward - strike) / vol_std
-        delta = ss.norm.cdf(d)
+        delta = cp_sign*div_fac*ss.norm.cdf(cp_sign*d)
         return delta
 
     def vega(self, strike, spot, texp, cp_sign=1):
@@ -49,7 +49,7 @@ class NormalModel:
         forward = spot / disc_fac * div_fac
         vol_std = np.fmax(self.vol * np.sqrt(texp), 1.0e-16)
         d = (forward - strike) / vol_std
-        vega = ss.norm.pdf(d)*np.sqrt(texp)
+        vega = div_fac*ss.norm.pdf(d)*np.sqrt(texp)
         return vega
 
     def gamma(self, strike, spot, texp, cp_sign=1):
@@ -58,11 +58,11 @@ class NormalModel:
         forward = spot / disc_fac * div_fac
         vol_std = np.fmax(self.vol * np.sqrt(texp), 1.0e-16)
         d = (forward - strike) / vol_std
-        gamma = ss.norm.pdf(d)/vol_std
+        gamma = div_fac*ss.norm.pdf(d)/vol_std
         return gamma
 
     def impvol(self, price, strike, spot, texp, cp_sign=1):
-        ''' 
-        <-- PUT your implementation here
-        '''
+        iv_func = lambda _vol: \
+            normal_formula(strike, spot, _vol, texp, self.intr, self.divr, cp_sign) - price
+        vol = sopt.brentq(iv_func, 0, 10*spot)
         return vol
