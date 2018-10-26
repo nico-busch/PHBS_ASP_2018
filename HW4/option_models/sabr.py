@@ -264,8 +264,14 @@ class ModelBsmMC:
         Generate paths for vol and price first. Then get prices (vector) for all strikes
         You may fix the random number seed
         '''
-        np.random.seed(12345)
+        #np.random.seed(12345)
+        
+        sigma = self.sigma if(sigma is None) else sigma
         texp = self.texp if(texp is None) else texp
+        
+        div_fac = np.exp(-texp*self.divr)
+        disc_fac = np.exp(-texp*self.intr)
+        forward = spot / disc_fac * div_fac
         
         n_steps = int(texp/self.time_step)
         
@@ -273,11 +279,11 @@ class ModelBsmMC:
         Z1 = Z_temp[:, :, :, 0]
         Z2 = self.rho * Z1 + np.sqrt(1 - self.rho**2) * Z_temp[:, :, :, 1]
         
-        sigma_t = self.sigma * np.cumprod(np.exp(self.alpha * np.sqrt(self.time_step) * Z2 - 0.5 * self.alpha**2 * self.time_step), axis=0)
+        sigma_t = sigma * np.cumprod(np.exp(self.alpha * np.sqrt(self.time_step) * Z2 - 0.5 * self.alpha**2 * self.time_step), axis=0)
                    
-        spot_t = np.exp(np.log(spot) + np.cumsum(self.sigma * np.sqrt(self.time_step) * Z1 - 0.5 * self.sigma**2 * self.time_step, axis=0))
+        forward_t = np.exp(np.log(spot) + np.cumsum(sigma * np.sqrt(self.time_step) * Z1 - 0.5 * self.sigma**2 * self.time_step, axis=0))
         
-        prices = np.mean(np.fmax(spot_t - strike[np.newaxis, np.newaxis, :], 0), axis=(0, 1))
+        prices = np.mean(np.fmax(forward_t - strike[np.newaxis, np.newaxis, :], 0), axis=(0, 1))
         
         return prices        
 
@@ -321,8 +327,14 @@ class ModelNormalMC:
         Generate paths for vol and price first. Then get prices (vector) for all strikes
         You may fix the random number seed
         '''
-        np.random.seed(12345)
+        #np.random.seed(12345)
+        
+        sigma = self.sigma if(sigma is None) else sigma
         texp = self.texp if(texp is None) else texp
+        
+        div_fac = np.exp(-texp*self.divr)
+        disc_fac = np.exp(-texp*self.intr)
+        forward = spot / disc_fac * div_fac
         
         n_steps = int(texp/self.time_step)
         
@@ -330,11 +342,11 @@ class ModelNormalMC:
         Z1 = Z_temp[:, :, :, 0]
         Z2 = self.rho * Z1 + np.sqrt(1 - self.rho**2) * Z_temp[:, :, :, 1]
         
-        sigma_t = self.sigma * np.cumprod(np.exp(self.alpha * np.sqrt(self.time_step) * Z2 - 0.5 * self.alpha**2 * self.time_step), axis=0)
+        sigma_t = sigma * np.cumprod(np.exp(self.alpha * np.sqrt(self.time_step) * Z2 - 0.5 * self.alpha**2 * self.time_step), axis=0)
                    
-        spot_t = spot + np.cumsum(self.sigma * np.sqrt(self.time_step) * Z1, axis=0)
+        forward_t = spot + np.cumsum(sigma * np.sqrt(self.time_step) * Z1, axis=0)
         
-        prices = np.mean(np.fmax(spot_t - strike[np.newaxis, np.newaxis, :], 0), axis=(0, 1))
+        prices = np.mean(np.fmax(forward_t - strike[np.newaxis, np.newaxis, :], 0), axis=(0, 1))
         
         return prices
 
@@ -368,7 +380,12 @@ class ModelBsmCondMC:
         use bsm_model
         should be same as bsm_vol method in ModelBsmMC (just copy & paste)
         '''
-        return 0
+        
+        price = self.price(strike, spot, texp, sigma)
+        iv_func = lambda _sigma: \
+            self.bsm_model.price(strike, spot, texp, _sigma) - price
+        sigma = sopt.brentq(iv_func, 0, 10)   
+        return sigma
     
     def price(self, strike, spot, texp=None, sigma=None, cp_sign=1):
         '''
@@ -377,20 +394,25 @@ class ModelBsmCondMC:
         Then get prices (vector) for all strikes
         You may fix the random number seed
         '''
+        #np.random.seed(12345)
         
-        np.random.seed(12345)
+        sigma = self.sigma if(sigma is None) else sigma
         texp = self.texp if(texp is None) else texp
         
+        div_fac = np.exp(-texp*self.divr)
+        disc_fac = np.exp(-texp*self.intr)
+        forward = spot / disc_fac * div_fac
+    
         n_steps = int(texp/self.time_step)
         
         Z = np.random.normal(size=(n_steps, self.n_samples, strike.size))
         
-        sigma_t = self.sigma * np.cumprod(np.exp(self.alpha * np.sqrt(self.time_step) * Z - 0.5 * self.alpha**2 * self.time_step), axis=0)
-        I_T = np.sum(sigma_t**2 * self.time_step, axis=0)
-        sigma_Texp = self.sigma * np.exp(-0.5 * self.alpha**2 * texp + self.alpha * Z)
-        forward_T = spot * np.exp((self.rho/self.alpha) * (sigma_Texp-self.sigma) - 0.5 * self.rho**2 * I_T)
-        vol = np.sqrt((1 - self.rho**2) * I_T / texp)
-        prices = self.bsm_model.price(strike, forward_T, texp, bsm_vol, cp_sign=cp_sign)
+        sigma_t = sigma * np.cumprod(np.exp(self.alpha * np.sqrt(self.time_step) * Z - 0.5 * self.alpha**2 * self.time_step), axis=0)
+        I_texp = np.sum(sigma_t**2 * self.time_step, axis=0)
+        forward_texp = forward * np.exp(self.rho * (sigma_t[-1] - sigma) / self.alpha - 0.5 * self.rho**2 * I_texp)
+        vol = np.sqrt((1 - self.rho**2) * I_texp / texp)
+        prices = np.mean(self.bsm_model.price(strike, forward_texp, texp, vol, cp_sign=cp_sign),axis=0)
+        
         return prices
 
 '''
@@ -401,6 +423,9 @@ class ModelNormalCondMC:
     alpha, rho = 0.0, 0.0
     texp, sigma, intr, divr = None, None, None, None
     normal_model = None
+    
+    n_samples = 1000
+    time_step = 0.25
     
     def __init__(self, texp, sigma, alpha=0, rho=0.0, beta=0.0, intr=0, divr=0):
         self.texp = texp
@@ -418,7 +443,12 @@ class ModelNormalCondMC:
         use normal_model
         should be same as norm_vol method in ModelNormalMC (just copy & paste)
         '''
-        return 0
+        
+        price = self.price(strike, spot, texp, sigma)
+        iv_func = lambda _sigma: \
+            self.normal_model.price(strike, spot, texp, _sigma) - price
+        sigma = sopt.brentq(iv_func, 0, 10)   
+        return sigma
         
     def price(self, strike, spot, texp=None, sigma=None, cp_sign=1):
         '''
@@ -426,5 +456,23 @@ class ModelNormalCondMC:
         Generate paths for vol only. Then compute integrated variance and normal price.
         You may fix the random number seed
         '''
-        np.random.seed(12345)
-        return 0
+        #np.random.seed(12345)
+        
+        sigma = self.sigma if(sigma is None) else sigma
+        texp = self.texp if(texp is None) else texp
+        
+        div_fac = np.exp(-texp*self.divr)
+        disc_fac = np.exp(-texp*self.intr)
+        forward = spot / disc_fac * div_fac
+    
+        n_steps = int(texp/self.time_step)
+        
+        Z = np.random.normal(size=(n_steps, self.n_samples, strike.size))
+        
+        sigma_t = sigma * np.cumprod(np.exp(self.alpha * np.sqrt(self.time_step) * Z - 0.5 * self.alpha**2 * self.time_step), axis=0)
+        I_texp = np.sum(sigma_t**2 * self.time_step, axis=0)
+        forward_texp = forward + self.rho * (sigma_t[-1] - sigma) / self.alpha
+        vol = np.sqrt((1 - self.rho**2) * I_texp / texp)
+        prices = np.mean(self.normal_model.price(strike, forward_texp, texp, vol, cp_sign=cp_sign),axis=0)
+        
+        return prices
