@@ -281,7 +281,7 @@ class ModelBsmMC:
         
         sigma_t = sigma * np.cumprod(np.exp(self.alpha * np.sqrt(self.time_step) * Z2 - 0.5 * self.alpha**2 * self.time_step), axis=0)
                    
-        forward_t = np.exp(np.log(spot) + np.cumsum(sigma * np.sqrt(self.time_step) * Z1 - 0.5 * self.sigma**2 * self.time_step, axis=0))
+        forward_t = np.exp(np.log(spot) + np.cumsum(sigma_t * np.sqrt(self.time_step) * Z1 - 0.5 * self.sigma**2 * self.time_step, axis=0))
         
         prices = np.mean(np.fmax(forward_t - strike[np.newaxis, np.newaxis, :], 0), axis=(0, 1))
         
@@ -344,7 +344,7 @@ class ModelNormalMC:
         
         sigma_t = sigma * np.cumprod(np.exp(self.alpha * np.sqrt(self.time_step) * Z2 - 0.5 * self.alpha**2 * self.time_step), axis=0)
                    
-        forward_t = spot + np.cumsum(sigma * np.sqrt(self.time_step) * Z1, axis=0)
+        forward_t = spot + np.cumsum(sigma_t * np.sqrt(self.time_step) * Z1, axis=0)
         
         prices = np.mean(np.fmax(forward_t - strike[np.newaxis, np.newaxis, :], 0), axis=(0, 1))
         
